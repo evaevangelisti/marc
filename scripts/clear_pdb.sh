@@ -3,7 +3,7 @@
 PML="./script.pml"
 
 pdb=""
-output_path=""
+output_file=""
 
 usage() {
   echo "usage: $0 [-h] [-p <pdb>] [-o <output>]"
@@ -14,7 +14,7 @@ main() {
     case "$opt" in
       h) usage; exit 0 ;;
       p) pdb="$OPTARG" ;;
-      o) output_path="$OPTARG" ;;
+      o) output_file="$OPTARG" ;;
       :) echo "error: missing argument for option '-$OPTARG'" >&2; usage; exit 1 ;;
       ?) echo "error: unknown option '-$OPTARG'" >&2; usage; exit 1 ;;
     esac
@@ -24,21 +24,21 @@ main() {
     echo "error: '$pdb' must be a valid .pdb file" >&2; usage; exit 1
   fi
 
-  if [[ -z "$output_path" ]]; then
-    output_path="./$(basename "$pdb" .pdb)_clean.pdb"
-  elif [[ -d "$output_path" ]]; then
-    output_path="${output_path}/$(basename "$pdb" .pdb)_clean.pdb"
-  elif [[ ! "$output_path" =~ \.pdb$ ]]; then
-    output_path="${output_path}.pdb"
+  if [[ -z "$output_file" ]]; then
+    output_file="./$(basename "$pdb" .pdb)_clean.pdb"
+  elif [[ -d "$output_file" ]]; then
+    output_file="${output_file}/$(basename "$pdb" .pdb)_clean.pdb"
+  elif [[ ! "$output_file" =~ \.pdb$ ]]; then
+    output_file="${output_file}.pdb"
   fi
 
-  mkdir -p "$(dirname "$output_path")"
+  mkdir -p "$(dirname "$output_file")"
 
-  cat > "$PML" <<EOF
+  cat <<EOF > "$PML"
 load $pdb
 remove solvent
 remove hetatm
-save $output_path
+save $output_file
 quit
 EOF
 

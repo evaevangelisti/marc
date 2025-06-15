@@ -15,7 +15,7 @@ setup() {
   mkdir -p "$TMP_DIR"
   cat <<EOF > "$INPUT"
 HEADER    TEST
-ATOM      1  N   MET A   1      11.104  13.207  10.456  1.00  0.00           N"
+ATOM      1  N   MET A   1      11.104  13.207  10.456  1.00  0.00           N
 EOF
 }
 
