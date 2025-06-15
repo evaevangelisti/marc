@@ -8,13 +8,16 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=8G
 
+set -e
+
 module load anaconda3/2023.09-0
+eval "$(conda shell.bash hook)"
 conda activate "$WORK/envs/pymol_env"
 
 module load profile/lifesc
 module load gromacs/2021.3--intel-oneapi-mpi--2021.4.0--intel--2021.4.0-cuda-11.5.0
 
-INPUT_DIR="./data/raw/microalgae"
+INPUT_DIR="./data/raw"
 PROCESSED_DIR="./data/processed"
 RESULTS_DIR="./results"
 
@@ -28,7 +31,7 @@ main() {
       continue
     }
 
-    ./scripts/simulate.sh -p "$PROCESSED_DIR/$(basename "$pdb" .pdb)_clean.pdb" -o "$RESULTS_DIR" || {
+    ./scripts/simulate.sh -p "$PROCESSED_DIR/$(basename "$pdb" .pdb)_clean.pdb" -o "$RESULTS_DIR/$(basename "$pdb" .pdb)" || {
       echo "$pdb: simulation failed" >&2
       continue
     }
