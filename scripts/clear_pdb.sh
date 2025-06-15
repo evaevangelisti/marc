@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 PML="./script.pml"
 
 pdb=""
