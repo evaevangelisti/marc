@@ -22,55 +22,86 @@ main() {
     esac
   done
 
+  pdb="$(realpath "$pdb")"
+
   if [[ -z "$pdb" || ! -f "$pdb" || "$pdb" != *.pdb ]]; then
     echo "error: '$pdb' must be a valid .pdb file" >&2; usage; exit 1
   fi
+
+  config_dir="$(realpath "$(cd "$(dirname "$0")" && pwd)/../config")"
+
+  if [[ ! -d "$config_dir" ]]; then
+    echo "error: '$config_dir' does not exist" >&2
+    exit 1
+  fi
+
+  required_files=(
+    co2.itp
+    co2.pdb
+    ions.mdp
+    minimization.mdp
+    npt.mdp
+    nvt.mdp
+    production.mdp
+  )
+
+  for file in "${required_files[@]}"; do
+    if [[ ! -f "$config_dir/$file" ]]; then
+      echo "error: missing file $config_dir/$file" >&2
+      exit 1
+    fi
+  done
 
   if [[ -z "$output_dir" ]]; then
     output_dir="./$(basename "$pdb" .pdb)"
   fi
 
-  mkdir -p "$output_dir"
+  mkdir -p "$output_dir/intermediate"
 
-  gmx pdb2gmx -f "$pdb" -o "$output_dir/processed.gro" -p "$output_dir/topol.top" -ff amber99sb-ildn -water tip3p
-  gmx editconf -f "$output_dir/processed.gro" -o "$output_dir/box.gro" -c -d 1.0
-  gmx solvate -cp "$output_dir/box.gro" -cs spc216.gro -o "$output_dir/solvated.gro" -p "$output_dir/topol.top"
-  gmx genion -s "$output_dir/solvated.tpr" -o "$output_dir/ions.gro" -p "$output_dir/topol.top" -pname NA -nname CL -neutral
+  pushd "$(pwd)" > /dev/null
+  cd "$output_dir/intermediate"
+  trap 'popd > /dev/null' EXIT
 
-  TMP_DIR=$(mktemp -d)
+  gmx pdb2gmx -f "$pdb" -o ./processed.gro -p ./topol.top -ff amber99sb-ildn -water tip3p
 
-  co2_pdb="$TMP_DIR/co2.pdb"
-  cat <<EOF > "$co2_pdb"
-HEADER    CARBON DIOXIDE
-HETATM    1  C   CO2     0       0.000   0.000   0.000  0.00  0.00           C
-HETATM    2  O   CO2     0       0.000   0.000  -1.208  0.00  0.00           O
-HETATM    3  O   CO2     0       0.000   0.000   1.208  0.00  0.00           O
-CONECT    1    2    3
-CONECT    2    1
-CONECT    3    1
-TER
-END
-EOF
+  gmx editconf -f "$config_dir/co2.pdb" -o "./co2.gro"
 
-  gmx insert-molecules -f "$output_dir/ions.gro" -ci "$co2_pdb" -o "$output_dir/co2.gro" -p "$output_dir/topol.top" -nmol "$co2_molecules"
+  cp "$config_dir/co2.itp" "./co2.itp"
+  sed "/#include \"amber99sb-ildn.ff\/forcefield.itp\"/a\\
+\\
+; Include topology for co2\
+\\
+#include \"co2.itp\"\
+\\
+" ./topol.top > ./topol.top.tmp && mv ./topol.top.tmp ./topol.top
+  printf "CO2%-$((18 - ${#co2_molecules}))s%d\n" "" "$co2_molecules" >> ./topol.top
 
-  rm -rf "$TMP_DIR"
+  gmx insert-molecules -f ./processed.gro -ci ./co2.gro -o ./complex.gro -nmol "$co2_molecules"
 
-  gmx grompp -f minimization.mdp -c "$output_dir/co2.gro" -p "$output_dir/topol.top" -o "$output_dir/minimization.tpr"
-  gmx mdrun -v -deffnm "$output_dir/minimization"
+  gmx editconf -f ./complex.gro -o ./box.gro -bt dodecahedron -d 1.0
 
-  gmx grompp -f nvt.mdp -c "$output_dir/minimization.gro" -p "$output_dir/topol.top" -o "$output_dir/nvt.tpr"
-  gmx mdrun -deffnm "$output_dir/nvt.tpr"
+  gmx solvate -cp ./box.gro -cs spc216.gro -p ./topol.top -o ./solvated.gro
 
-  gmx grompp -f npt.mdp -c "$output_dir/nvt.gro" -p "$output_dir/topol.top" -o "$output_dir/npt.tpr"
-  gmx mdrun -deffnm "$output_dir/npt.tpr"
+  gmx grompp -f "$config_dir/ions.mdp" -c ./solvated.gro -p ./topol.top -o ./ions.tpr
+  echo SOL | gmx genion -s ./ions.tpr -o ./ions.gro -p ./topol.top -pname NA -nname CL -neutral
 
-  gmx grompp -f production.mdp -c "$output_dir/npt.gro" -p "$output_dir/topol.top" -o "$output_dir/production.tpr"
-  gmx mdrun -deffnm "$output_dir/production"
+  gmx grompp -f "$config_dir/minimization.mdp" -c ./ions.gro -p ./topol.top -o ./minimization.tpr
+  gmx mdrun -v -deffnm ./minimization
 
-  gmx rms -s "$output_dir/production.tpr" -f "$output_dir/production.xtc" -o "$output_dir/rmsd.xvg"
-  gmx rmsf -s "$output_dir/production.tpr" -f "$output_dir/production.xtc" -o "$output_dir/rmsf.xvg"
-  gmx distance -s "$output_dir/production.tpr" -f "$output_dir/production.xtc" -select 'com of group "CO2" plus com of group "Rubisco"' -o "$output_dir/distances.xvg"
+  gmx grompp -f "$config_dir/nvt.mdp" -c ./minimization.gro -r ./minimization.gro -p ./topol.top -o ./nvt.tpr
+  gmx mdrun -deffnm ./nvt.tpr
+
+  gmx grompp -f "$config_dir/npt.mdp" -c ./nvt.gro -t ./nvt.cpt -r ./nvt.gro -p ./topol.top -o ./npt.tpr
+  gmx mdrun -deffnm ./npt.tpr
+
+  gmx grompp -f "$config_dir/production.mdp" -c ./npt.gro -t ./npt.cpt -p ./topol.top -o ./production.tpr
+  gmx mdrun -deffnm ./production
+
+  gmx rms -s ./production.tpr -f ./production.xtc -o ../rmsd.xvg
+  gmx rmsf -s ./production.tpr -f ./production.xtc -o ../rmsf.xvg
+  gmx distance -s ./production.tpr -f ./production.xtc -select 'com of group "CO2" plus com of group "Rubisco"' -o ../distances.xvg
+
+  rm -rf -- "$output_dir/intermediate"
 }
 
 main "$@"
