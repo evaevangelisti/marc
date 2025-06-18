@@ -22,12 +22,6 @@ main() {
     esac
   done
 
-  pdb="$(realpath "$pdb")"
-
-  if [[ -z "$pdb" || ! -f "$pdb" || "$pdb" != *.pdb ]]; then
-    echo "error: '$pdb' must be a valid .pdb file" >&2; usage; exit 1
-  fi
-
   config_dir="$(realpath "$(cd "$(dirname "$0")" && pwd)/../config")"
 
   if [[ ! -d "$config_dir" ]]; then
@@ -51,6 +45,16 @@ main() {
       exit 1
     fi
   done
+
+  if [[ -z "$pdb" || ! -f "$pdb" || "$pdb" != *.pdb ]]; then
+    echo "error: '-p' must be a valid .pdb file" >&2; usage; exit 1
+  fi
+
+  pdb="$(realpath "$pdb")"
+
+  if [[ ! "$co2_molecules" =~ ^[0-9]+$ || "$co2_molecules" -lt 1 ]]; then
+    echo "error: '-n' must be a positive integer" >&2; usage; exit 1
+  fi
 
   if [[ -z "$output_dir" ]]; then
     output_dir="./$(basename "$pdb" .pdb)"
