@@ -6,14 +6,14 @@ pdb=""
 output_path=""
 
 usage() {
-  echo "usage: $0 [-h] [-p <pdb>] [-o <output>]"
+  echo "usage: $0 [-h] [-i <pdb>] [-o <output>]"
 }
 
 main() {
-  while getopts ":hp:o:" opt; do
+  while getopts ":hi:o:" opt; do
     case "$opt" in
       h) usage; exit 0 ;;
-      p) pdb="$OPTARG" ;;
+      i) pdb="$OPTARG" ;;
       o) output_path="$OPTARG" ;;
       :) echo "error: missing argument for option '-$OPTARG'" >&2; usage; exit 1 ;;
       ?) echo "error: unknown option '-$OPTARG'" >&2; usage; exit 1 ;;
@@ -21,7 +21,7 @@ main() {
   done
 
   if [[ -z "$pdb" || ! -f "$pdb" || "$pdb" != *.pdb ]]; then
-    echo "error: '$pdb' must be a valid .pdb file" >&2; usage; exit 1
+    echo "error: '-i' must be a valid .pdb file" >&2; usage; exit 1
   fi
 
   if [[ -z "$output_path" ]]; then
