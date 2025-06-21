@@ -67,10 +67,11 @@ main() {
   mkdir -p "$output_dir/intermediate"
 
   if [[ "$parallel" -eq 1 ]]; then
-    if command -v srun &> /dev/null && command -v gmx_mpi &> /dev/null; then
-      gmx="srun gmx_mpi"
-    elif command -v gmx_mpi &> /dev/null; then
+    if command -v gmx_mpi &> /dev/null; then
       gmx="gmx_mpi"
+    else
+      echo "error: parallel execution requested but no MPI-enabled GROMACS found" >&2
+      exit 1
     fi
   fi
 
@@ -102,16 +103,32 @@ main() {
   echo SOL | gmx genion -s ./ions.tpr -o ./ions.gro -p ./topol.top -pname NA -nname CL -neutral
 
   "$gmx" grompp -f "$config_dir/minimization.mdp" -c ./ions.gro -p ./topol.top -o ./minimization.tpr
-  "$gmx" mdrun -v -deffnm ./minimization
+  if [[ "$parallel" -eq 1 ]] && command -v srun &> /dev/null; then
+    srun "$gmx" mdrun -v -deffnm ./minimization
+  else
+    "$gmx" mdrun -v -deffnm ./minimization
+  fi
 
   "$gmx" grompp -f "$config_dir/nvt.mdp" -c ./minimization.gro -r ./minimization.gro -p ./topol.top -o ./nvt.tpr
-  "$gmx" mdrun -deffnm ./nvt.tpr
+  if [[ "$parallel" -eq 1 ]] && command -v srun &> /dev/null; then
+    srun "$gmx" mdrun -v -deffnm ./nvt.tpr
+  else
+    "$gmx" mdrun -v -deffnm ./nvt.tpr
+  fi
 
   "$gmx" grompp -f "$config_dir/npt.mdp" -c ./nvt.gro -t ./nvt.cpt -r ./nvt.gro -p ./topol.top -o ./npt.tpr
-  "$gmx" mdrun -deffnm ./npt.tpr
+  if [[ "$parallel" -eq 1 ]] && command -v srun &> /dev/null; then
+    srun "$gmx" mdrun -v -deffnm ./npt.tpr
+  else
+    "$gmx" mdrun -deffnm ./npt.tpr
+  fi
 
   "$gmx" grompp -f "$config_dir/production.mdp" -c ./npt.gro -t ./npt.cpt -p ./topol.top -o ./production.tpr
-  "$gmx" mdrun -deffnm ./production
+  if [[ "$parallel" -eq 1 ]] && command -v srun &> /dev/null; then
+    srun "$gmx" mdrun -v -deffnm ./production
+  else
+    "$gmx" mdrun -deffnm ./production
+  fi
 
   "$gmx" rms -s ./production.tpr -f ./production.xtc -o ../rmsd.xvg
   "$gmx" rmsf -s ./production.tpr -f ./production.xtc -o ../rmsf.xvg
