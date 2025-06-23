@@ -2,15 +2,12 @@
 
 set -e
 
-gmx="gmx"
-
 pdb=""
 co2_molecules=1
 output_dir=""
-parallel=0
 
 usage() {
-  echo "usage: $0 [-h] [-i <pdb>] [-n <co2-molecules>] [-o <output-dir>] [-p]"
+  echo "usage: $0 [-h] [-i <pdb>] [-n <co2-molecules>] [-o <output-dir>]"
 }
 
 main() {
@@ -20,7 +17,6 @@ main() {
       i) pdb="$OPTARG" ;;
       n) co2_molecules="$OPTARG" ;;
       o) output_dir="$OPTARG" ;;
-      p) parallel=1 ;;
       :) echo "error: missing argument for option '-$OPTARG'" >&2; usage; exit 1 ;;
       ?) echo "error: unknown option '-$OPTARG'" >&2; usage; exit 1 ;;
     esac
@@ -66,22 +62,13 @@ main() {
 
   mkdir -p "$output_dir/intermediate"
 
-  if [[ "$parallel" -eq 1 ]]; then
-    if command -v gmx_mpi &> /dev/null; then
-      gmx="gmx_mpi"
-    else
-      echo "error: parallel execution requested but no MPI-enabled GROMACS found" >&2
-      exit 1
-    fi
-  fi
-
   pushd "$(pwd)" > /dev/null
   cd "$output_dir/intermediate"
   trap 'popd > /dev/null' EXIT
 
-  "$gmx" pdb2gmx -f "$pdb" -o ./processed.gro -p ./topol.top -ff amber99sb-ildn -water tip3p
+  gmx pdb2gmx -f "$pdb" -o ./processed.gro -p ./topol.top -ff amber99sb-ildn -water tip3p
 
-  "$gmx" editconf -f "$config_dir/co2.pdb" -o "./co2.gro"
+  gmx editconf -f "$config_dir/co2.pdb" -o "./co2.gro"
 
   cp "$config_dir/co2.itp" "./co2.itp"
   sed "/#include \"amber99sb-ildn.ff\/forcefield.itp\"/a\\
@@ -93,46 +80,30 @@ main() {
 " ./topol.top > ./topol.top.tmp && mv ./topol.top.tmp ./topol.top
   printf "CO2%-$((18 - ${#co2_molecules}))s%d\n" "" "$co2_molecules" >> ./topol.top
 
-  "$gmx" insert-molecules -f ./processed.gro -ci ./co2.gro -o ./complex.gro -nmol "$co2_molecules"
+  gmx insert-molecules -f ./processed.gro -ci ./co2.gro -o ./complex.gro -nmol "$co2_molecules"
 
-  "$gmx" editconf -f ./complex.gro -o ./box.gro -bt dodecahedron -d 1.0
+  gmx editconf -f ./complex.gro -o ./box.gro -bt dodecahedron -d 1.0
 
-  "$gmx" solvate -cp ./box.gro -cs spc216.gro -p ./topol.top -o ./solvated.gro
+  gmx solvate -cp ./box.gro -cs spc216.gro -p ./topol.top -o ./solvated.gro
 
-  "$gmx" grompp -f "$config_dir/ions.mdp" -c ./solvated.gro -p ./topol.top -o ./ions.tpr
+  gmx grompp -f "$config_dir/ions.mdp" -c ./solvated.gro -p ./topol.top -o ./ions.tpr
   echo SOL | gmx genion -s ./ions.tpr -o ./ions.gro -p ./topol.top -pname NA -nname CL -neutral
 
-  "$gmx" grompp -f "$config_dir/minimization.mdp" -c ./ions.gro -p ./topol.top -o ./minimization.tpr
-  if [[ "$parallel" -eq 1 ]] && command -v srun &> /dev/null; then
-    srun "$gmx" mdrun -v -deffnm ./minimization
-  else
-    "$gmx" mdrun -v -deffnm ./minimization
-  fi
+  gmx grompp -f "$config_dir/minimization.mdp" -c ./ions.gro -p ./topol.top -o ./minimization.tpr
+  gmx mdrun -v -deffnm ./minimization
 
-  "$gmx" grompp -f "$config_dir/nvt.mdp" -c ./minimization.gro -r ./minimization.gro -p ./topol.top -o ./nvt.tpr
-  if [[ "$parallel" -eq 1 ]] && command -v srun &> /dev/null; then
-    srun "$gmx" mdrun -v -deffnm ./nvt.tpr
-  else
-    "$gmx" mdrun -v -deffnm ./nvt.tpr
-  fi
+  gmx grompp -f "$config_dir/nvt.mdp" -c ./minimization.gro -r ./minimization.gro -p ./topol.top -o ./nvt.tpr
+  gmx mdrun -v -deffnm ./nvt.tpr
 
-  "$gmx" grompp -f "$config_dir/npt.mdp" -c ./nvt.gro -t ./nvt.cpt -r ./nvt.gro -p ./topol.top -o ./npt.tpr
-  if [[ "$parallel" -eq 1 ]] && command -v srun &> /dev/null; then
-    srun "$gmx" mdrun -v -deffnm ./npt.tpr
-  else
-    "$gmx" mdrun -deffnm ./npt.tpr
-  fi
+  gmx grompp -f "$config_dir/npt.mdp" -c ./nvt.gro -t ./nvt.cpt -r ./nvt.gro -p ./topol.top -o ./npt.tpr
+  gmx mdrun -deffnm ./npt.tpr
 
-  "$gmx" grompp -f "$config_dir/production.mdp" -c ./npt.gro -t ./npt.cpt -p ./topol.top -o ./production.tpr
-  if [[ "$parallel" -eq 1 ]] && command -v srun &> /dev/null; then
-    srun "$gmx" mdrun -v -deffnm ./production
-  else
-    "$gmx" mdrun -deffnm ./production
-  fi
+  gmx grompp -f "$config_dir/production.mdp" -c ./npt.gro -t ./npt.cpt -p ./topol.top -o ./production.tpr
+  gmx mdrun -deffnm ./npt.tpr
 
-  "$gmx" rms -s ./production.tpr -f ./production.xtc -o ../rmsd.xvg
-  "$gmx" rmsf -s ./production.tpr -f ./production.xtc -o ../rmsf.xvg
-  "$gmx" distance -s ./production.tpr -f ./production.xtc -select 'com of group "CO2" plus com of group "Rubisco"' -o ../distances.xvg
+  gmx rms -s ./production.tpr -f ./production.xtc -o ../rmsd.xvg
+  gmx rmsf -s ./production.tpr -f ./production.xtc -o ../rmsf.xvg
+  gmx distance -s ./production.tpr -f ./production.xtc -select 'com of group "CO2" plus com of group "Rubisco"' -o ../distances.xvg
 
   rm -rf -- "$output_dir/intermediate"
 }

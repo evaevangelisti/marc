@@ -17,7 +17,7 @@ conda activate "$WORK/envs/pymol_env"
 trap 'conda deactivate' EXIT
 
 module load profile/lifesc
-module load gromacs/2021.3--intel-oneapi-mpi--2021.4.0--intel--2021.4.0-cuda-11.5.0
+module load gromacs/2021.2
 
 INPUT_DIR="./data/raw"
 PROCESSED_DIR="./data/processed"
@@ -33,7 +33,7 @@ main() {
       continue
     }
 
-    ./scripts/simulate.sh -i "$PROCESSED_DIR/$(basename "$pdb" .pdb)_clean.pdb" -o "$RESULTS_DIR/$(basename "$pdb" .pdb)" -p || {
+    ./scripts/simulate.sh -i "$PROCESSED_DIR/$(basename "$pdb" .pdb)_clean.pdb" -o "$RESULTS_DIR/$(basename "$pdb" .pdb)" || {
       echo "$pdb: simulation failed" >&2
       continue
     }
