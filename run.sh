@@ -2,8 +2,8 @@
 #SBATCH --job-name=marc
 #SBATCH --partition=g100_usr_prod
 #SBATCH --nodes=1
-#SBATCH --ntasks=48
-#SBATCH --cpus-per-task=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=48
 #SBATCH --mem=350G
 #SBATCH --time=24:00:00
 #SBATCH --output=logs/%x_%j.out
@@ -17,7 +17,7 @@ conda activate "$WORK/envs/pymol_env"
 trap 'conda deactivate' EXIT
 
 module load profile/lifesc
-module load gromacs/2021.2
+module load autoload gromacs/2021.2
 
 INPUT_DIR="./data/raw"
 PROCESSED_DIR="./data/processed"

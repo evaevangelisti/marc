@@ -92,20 +92,42 @@ main() {
   gmx grompp -f "$config_dir/minimization.mdp" -c ./ions.gro -p ./topol.top -o ./minimization.tpr
   gmx mdrun -v -deffnm ./minimization
 
-  gmx grompp -f "$config_dir/nvt.mdp" -c ./minimization.gro -r ./minimization.gro -p ./topol.top -o ./nvt.tpr
+  gmx make_ndx -f ./co2.gro -o ./co2.ndx << EOF
+0 & ! a H*
+q
+EOF
+  gmx genrestr -f ./co2.gro -n ./co2.ndx -o ./posre_co2.itp -fc 1000 1000 1000
+  sed "/#include \"co2.itp\"/a\\
+\\
+; Ligand position restraints\
+\\
+#ifdef POSRES\
+\\
+#include \"posre_co2.itp\"\
+\\
+#endif\
+\\
+" ./topol.top > ./topol.top.tmp && mv ./topol.top.tmp ./topol.top
+
+  gmx make_ndx -f ./minimization.gro -o ./index.ndx << EOF
+Protein | CO2
+q
+EOF
+
+  gmx grompp -f "$config_dir/nvt.mdp" -c ./minimization.gro -r ./minimization.gro -p ./topol.top -n ./index.ndx -o ./nvt.tpr
   gmx mdrun -v -deffnm ./nvt.tpr
 
-  gmx grompp -f "$config_dir/npt.mdp" -c ./nvt.gro -t ./nvt.cpt -r ./nvt.gro -p ./topol.top -o ./npt.tpr
+  gmx grompp -f "$config_dir/npt.mdp" -c ./nvt.gro -t ./nvt.cpt -r ./nvt.gro -p ./topol.top -n ./index.ndx -o ./npt.tpr
   gmx mdrun -deffnm ./npt.tpr
 
-  gmx grompp -f "$config_dir/production.mdp" -c ./npt.gro -t ./npt.cpt -p ./topol.top -o ./production.tpr
+  gmx grompp -f "$config_dir/production.mdp" -c ./npt.gro -t ./npt.cpt -p ./topol.top -n ./index.ndx -o ./production.tpr
   gmx mdrun -deffnm ./npt.tpr
 
-  gmx rms -s ./production.tpr -f ./production.xtc -o ../rmsd.xvg
-  gmx rmsf -s ./production.tpr -f ./production.xtc -o ../rmsf.xvg
-  gmx distance -s ./production.tpr -f ./production.xtc -select 'com of group "CO2" plus com of group "Rubisco"' -o ../distances.xvg
+  echo "Protein" | gmx trjconv -s ./production.tpr -f ./production.xtc -o ./production_centered.xtc -center -pbc mol -ur compact
 
-  rm -rf -- "$output_dir/intermediate"
+  gmx rms -s ./production.tpr -f ./production_centered.xtc -o ../rmsd.xvg
+  gmx rmsf -s ./production.tpr -f ./production_centered.xtc -o ../rmsf.xvg
+  gmx distance -s ./production.tpr -f ./production_centered.xtc -select 'com of group "CO2" plus com of group "Rubisco"' -o ../distances.xvg
 }
 
 main "$@"
