@@ -96,7 +96,7 @@ main() {
 0 & ! a H*
 q
 EOF
-  gmx genrestr -f ./co2.gro -n ./co2.ndx -o ./posre_co2.itp -fc 1000 1000 1000
+  echo "CO2" | gmx genrestr -f ./co2.gro -n ./co2.ndx -o ./posre_co2.itp -fc 1000 1000 1000
   sed "/#include \"co2.itp\"/a\\
 \\
 ; Ligand position restraints\
