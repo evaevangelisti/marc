@@ -115,13 +115,13 @@ q
 EOF
 
   gmx grompp -f "$config_dir/nvt.mdp" -c ./minimization.gro -r ./minimization.gro -p ./topol.top -n ./index.ndx -o ./nvt.tpr
-  gmx mdrun -v -deffnm ./nvt.tpr
+  gmx mdrun -v -deffnm ./nvt
 
   gmx grompp -f "$config_dir/npt.mdp" -c ./nvt.gro -t ./nvt.cpt -r ./nvt.gro -p ./topol.top -n ./index.ndx -o ./npt.tpr
-  gmx mdrun -deffnm ./npt.tpr
+  gmx mdrun -deffnm ./npt
 
   gmx grompp -f "$config_dir/production.mdp" -c ./npt.gro -t ./npt.cpt -p ./topol.top -n ./index.ndx -o ./production.tpr
-  gmx mdrun -deffnm ./npt.tpr
+  gmx mdrun -deffnm ./production
 
   echo "Protein" | gmx trjconv -s ./production.tpr -f ./production.xtc -o ./production_centered.xtc -center -pbc mol -ur compact
 
