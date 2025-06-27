@@ -110,7 +110,7 @@ EOF
 " ./topol.top > ./topol.top.tmp && mv ./topol.top.tmp ./topol.top
 
   gmx make_ndx -f ./minimization.gro -o ./index.ndx << EOF
-Protein | CO2
+1 | 13
 q
 EOF
 
