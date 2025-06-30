@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=marc
 #SBATCH --partition=g100_usr_prod
-#SBATCH --nodes=1
+#SBATCH --nodes=3
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=48
 #SBATCH --mem=350G
@@ -17,7 +17,7 @@ conda activate "$WORK/envs/pymol_env"
 trap 'conda deactivate' EXIT
 
 module load profile/lifesc
-module load autoload gromacs/2021.2
+module load gromacs/2021.3--intel-oneapi-mpi--2021.4.0--intel--2021.4.0-cuda-11.5.0
 
 INPUT_DIR="./data/raw"
 PROCESSED_DIR="./data/processed"
@@ -33,7 +33,7 @@ main() {
       continue
     }
 
-    ./scripts/simulate.sh -i "$PROCESSED_DIR/$(basename "$pdb" .pdb)_clean.pdb" -o "$RESULTS_DIR/$(basename "$pdb" .pdb)" || {
+    ./scripts/simulate.sh -i "$PROCESSED_DIR/$(basename "$pdb" .pdb)_clean.pdb" -o "$RESULTS_DIR/$(basename "$pdb" .pdb) -p" || {
       echo "$pdb: simulation failed" >&2
       continue
     }
