@@ -2,12 +2,13 @@
 #SBATCH --job-name=marc
 #SBATCH --partition=g100_usr_prod
 #SBATCH --nodes=3
-#SBATCH --ntasks=1
+#SBATCH --ntasks=3
 #SBATCH --cpus-per-task=48
 #SBATCH --mem=350G
 #SBATCH --time=24:00:00
 #SBATCH --output=logs/%x_%j.out
 #SBATCH --error=logs/%x_%j.err
+#SBATCH --array=0-5
 
 set -e
 
@@ -23,21 +24,20 @@ INPUT_DIR="./data/raw"
 PROCESSED_DIR="./data/processed"
 RESULTS_DIR="./results"
 
+PDB_LIST="$INPUT_DIR/*.pdb"
+
 main() {
-  rm -rf "$PROCESSED_DIR" "$RESULTS_DIR"
-  mkdir -p "$PROCESSED_DIR" "$RESULTS_DIR"
+  pdb="${PDB_LIST[$SLURM_ARRAY_TASK_ID]}"
 
-  for pdb in "$INPUT_DIR"/*.pdb; do
-    ./scripts/clear_pdb.sh -i "$pdb" -o "$PROCESSED_DIR" || {
-      echo "$pdb: cleaning failed" >&2
-      continue
-    }
+  ./scripts/clear_pdb.sh -i "$pdb" -o "$PROCESSED_DIR" || {
+    echo "$pdb: cleaning failed" >&2
+    exit 1
+  }
 
-    ./scripts/simulate.sh -i "$PROCESSED_DIR/$(basename "$pdb" .pdb)_clean.pdb" -o "$RESULTS_DIR/$(basename "$pdb" .pdb) -p" || {
-      echo "$pdb: simulation failed" >&2
-      continue
-    }
-  done
+  ./scripts/simulate.sh -i "$PROCESSED_DIR/$(basename "$pdb" .pdb)_clean.pdb" -o "$RESULTS_DIR/$(basename "$pdb" .pdb)" -p || {
+    echo "$pdb: simulation failed" >&2
+    exit 1
+  }
 }
 
 main "$@"
