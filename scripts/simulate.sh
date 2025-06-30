@@ -2,7 +2,8 @@
 
 set -e
 
-gmx="gmx"
+gmx_serial="autoload gromacs/2021.2 "
+gmx_parallel="gromacs/2021.3--intel-oneapi-mpi--2021.4.0--intel--2021.4.0-cuda-11.5.0"
 
 pdb=""
 co2_molecules=1
@@ -11,6 +12,13 @@ parallel=0
 
 usage() {
   echo "usage: $0 [-h] [-i <pdb>] [-n <co2-molecules>] [-o <output-dir>] [-p]"
+}
+
+switch_module() {
+  module purge
+
+  module load profile/lifesc
+  module load "$1"
 }
 
 main() {
@@ -66,22 +74,13 @@ main() {
 
   mkdir -p "$output_dir/intermediate"
 
-  if [[ "$parallel" -eq 1 ]]; then
-    if command -v gmx_mpi &> /dev/null; then
-      gmx="gmx_mpi"
-    else
-      echo "error: parallel execution requested but no MPI-enabled GROMACS found" >&2
-      exit 1
-    fi
-  fi
-
   pushd "$(pwd)" > /dev/null
   cd "$output_dir/intermediate"
   trap 'popd > /dev/null' EXIT
 
-  "$gmx" pdb2gmx -f "$pdb" -o ./processed.gro -p ./topol.top -ff amber99sb-ildn -water tip3p
+  gmx pdb2gmx -f "$pdb" -o ./processed.gro -p ./topol.top -ff amber99sb-ildn -water tip3p
 
-  "$gmx" editconf -f "$config_dir/co2.pdb" -o "./co2.gro"
+  gmx editconf -f "$config_dir/co2.pdb" -o "./co2.gro"
 
   cp "$config_dir/co2.itp" "./co2.itp"
   sed "/#include \"amber99sb-ildn.ff\/forcefield.itp\"/a\\
@@ -93,23 +92,25 @@ main() {
 " ./topol.top > ./topol.top.tmp && mv ./topol.top.tmp ./topol.top
   printf "CO2%-$((18 - ${#co2_molecules}))s%d\n" "" "$co2_molecules" >> ./topol.top
 
-  "$gmx" insert-molecules -f ./processed.gro -ci ./co2.gro -o ./complex.gro -nmol "$co2_molecules"
+  gmx insert-molecules -f ./processed.gro -ci ./co2.gro -o ./complex.gro -nmol "$co2_molecules"
 
-  "$gmx" editconf -f ./complex.gro -o ./box.gro -bt dodecahedron -d 1.0
+  gmx editconf -f ./complex.gro -o ./box.gro -bt dodecahedron -d 1.0
 
-  "$gmx" solvate -cp ./box.gro -cs spc216.gro -p ./topol.top -o ./solvated.gro
+  gmx solvate -cp ./box.gro -cs spc216.gro -p ./topol.top -o ./solvated.gro
 
-  "$gmx" grompp -f "$config_dir/ions.mdp" -c ./solvated.gro -p ./topol.top -o ./ions.tpr
+  gmx grompp -f "$config_dir/ions.mdp" -c ./solvated.gro -p ./topol.top -o ./ions.tpr
   echo SOL | gmx genion -s ./ions.tpr -o ./ions.gro -p ./topol.top -pname NA -nname CL -neutral
 
-  "$gmx" grompp -f "$config_dir/minimization.mdp" -c ./ions.gro -p ./topol.top -o ./minimization.tpr
+  gmx grompp -f "$config_dir/minimization.mdp" -c ./ions.gro -p ./topol.top -o ./minimization.tpr
   if [[ "$parallel" -eq 1 ]] && command -v srun &> /dev/null; then
-    srun "$gmx" mdrun -v -deffnm ./minimization
+    switch_module "$gmx_parallel"
+    srun gmx-mpi mdrun -v -deffnm ./minimization
+    switch_module "$gmx_serial"
   else
-    "$gmx" mdrun -v -deffnm ./minimization
+    gmx mdrun -v -deffnm ./minimization
   fi
 
-  "$gmx" make_ndx -f ./co2.gro -o ./co2.ndx << EOF
+  gmx make_ndx -f ./co2.gro -o ./co2.ndx << EOF
 0 & ! a H*
 q
 EOF
@@ -126,30 +127,36 @@ EOF
 \\
 " ./topol.top > ./topol.top.tmp && mv ./topol.top.tmp ./topol.top
 
-  "$gmx" make_ndx -f ./minimization.gro -o ./index.ndx << EOF
+  gmx make_ndx -f ./minimization.gro -o ./index.ndx << EOF
 1 | 13
 q
 EOF
 
-  "$gmx" grompp -f "$config_dir/nvt.mdp" -c ./minimization.gro -r ./minimization.gro -p ./topol.top -n ./index.ndx -o ./nvt.tpr
+  gmx grompp -f "$config_dir/nvt.mdp" -c ./minimization.gro -r ./minimization.gro -p ./topol.top -n ./index.ndx -o ./nvt.tpr
   if [[ "$parallel" -eq 1 ]] && command -v srun &> /dev/null; then
-    srun "$gmx" mdrun -v -deffnm ./nvt
+    switch_module "$gmx_parallel"
+    srun gmx-mpi mdrun -v -deffnm ./nvt
+    switch_module "$gmx_serial"
   else
-    "$gmx" mdrun -v -deffnm ./nvt
+    gmx mdrun -v -deffnm ./nvt
   fi
 
-  "$gmx" grompp -f "$config_dir/npt.mdp" -c ./nvt.gro -t ./nvt.cpt -r ./nvt.gro -p ./topol.top -n ./index.ndx -o ./npt.tpr
+  gmx grompp -f "$config_dir/npt.mdp" -c ./nvt.gro -t ./nvt.cpt -r ./nvt.gro -p ./topol.top -n ./index.ndx -o ./npt.tpr
   if [[ "$parallel" -eq 1 ]] && command -v srun &> /dev/null; then
-    srun "$gmx" mdrun -v -deffnm ./npt
+    switch_module "$gmx_parallel"
+    srun gmx-mpi mdrun -v -deffnm ./npt
+    switch_module "$gmx_serial"
   else
-    "$gmx" mdrun -v -deffnm ./npt
+    gmx mdrun -v -deffnm ./npt
   fi
 
-  "$gmx" grompp -f "$config_dir/production.mdp" -c ./npt.gro -t ./npt.cpt -p ./topol.top -n ./index.ndx -o ./production.tpr
+  gmx grompp -f "$config_dir/production.mdp" -c ./npt.gro -t ./npt.cpt -p ./topol.top -n ./index.ndx -o ./production.tpr
   if [[ "$parallel" -eq 1 ]] && command -v srun &> /dev/null; then
-    srun "$gmx" mdrun -v -deffnm ./production
+    switch_module "$gmx_parallel"
+    srun gmx-mpi mdrun -v -deffnm ./production
+    switch_module "$gmx_serial"
   else
-    "$gmx" mdrun -v -deffnm ./production
+    gmx mdrun -v -deffnm ./production
   fi
 
   echo "Protein" | gmx trjconv -s ./production.tpr -f ./production.xtc -o ./production_centered.xtc -center -pbc mol -ur compact

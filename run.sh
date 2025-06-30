@@ -18,26 +18,23 @@ conda activate "$WORK/envs/pymol_env"
 trap 'conda deactivate' EXIT
 
 module load profile/lifesc
-module load gromacs/2021.3--intel-oneapi-mpi--2021.4.0--intel--2021.4.0-cuda-11.5.0
+module load autoload gromacs/2021.2
 
 INPUT_DIR="./data/raw"
 PROCESSED_DIR="./data/processed"
 RESULTS_DIR="./results"
 
-PDB_LIST="$INPUT_DIR/*.pdb"
+mkdir -p "$PROCESSED_DIR" "$RESULTS_DIR"
+mapfile -t PDB_LIST < <(find "$INPUT_DIR" -maxdepth 1 -name "*.pdb" -print | sort)
 
-main() {
-  pdb="${PDB_LIST[$SLURM_ARRAY_TASK_ID]}"
+pdb="${PDB_LIST[$SLURM_ARRAY_TASK_ID]}"
 
-  ./scripts/clear_pdb.sh -i "$pdb" -o "$PROCESSED_DIR" || {
-    echo "$pdb: cleaning failed" >&2
-    exit 1
-  }
-
-  ./scripts/simulate.sh -i "$PROCESSED_DIR/$(basename "$pdb" .pdb)_clean.pdb" -o "$RESULTS_DIR/$(basename "$pdb" .pdb)" -p || {
-    echo "$pdb: simulation failed" >&2
-    exit 1
-  }
+./scripts/clear_pdb.sh -i "$pdb" -o "$PROCESSED_DIR" || {
+  echo "$pdb: cleaning failed" >&2
+  exit 1
 }
 
-main "$@"
+./scripts/simulate.sh -i "$PROCESSED_DIR/$(basename "$pdb" .pdb)_clean.pdb" -o "$RESULTS_DIR/$(basename "$pdb" .pdb)" -p || {
+  echo "$pdb: simulation failed" >&2
+  exit 1
+}
