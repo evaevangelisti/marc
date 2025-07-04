@@ -1,7 +1,7 @@
 title                   = Protein-ligand complex MD simulation
 ; Run parameters
 integrator              = md        ; leap-frog integrator
-nsteps                  = 5000000   ; 2 * 5000000 = 10000 ps (10 ns)
+nsteps                  = 50000000  ; 2 * 5000000 = 10000 ps (100 ns)
 dt                      = 0.002     ; 2 fs
 ; Output control
 nstenergy               = 5000      ; save energies every 10.0 ps
@@ -33,7 +33,7 @@ tc-grps                 = Protein_CO2 Water_and_ions    ; two coupling groups - 
 tau_t                   = 0.1   0.1                     ; time constant, in ps
 ref_t                   = 300   300                     ; reference temperature, one for each group, in K
 ; Pressure coupling
-pcoupl                  = Parrinello-Rahman             ; pressure coupling is on for NPT
+pcoupl                  = C-rescale                     ; pressure coupling is on for NPT
 pcoupltype              = isotropic                     ; uniform scaling of box vectors
 tau_p                   = 2.0                           ; time constant, in ps
 ref_p                   = 1.0                           ; reference pressure, in bar
