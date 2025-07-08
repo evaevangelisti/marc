@@ -16,21 +16,27 @@ trap 'conda deactivate' EXIT
 module load profile/lifesc
 module load autoload gromacs/2021.2
 
-export OMP_NUM_THREADS=1
-export MKL_NUM_THREADS=1
-
 PDB="./data/raw/1gk8.pdb"
+GAS="co2"
+MOLECULES=1
+
 PROCESSED_DIR="./data/processed"
 RESULTS_DIR="./results"
 
-mkdir -p "$PROCESSED_DIR" "$RESULTS_DIR"
+main() {
+  mkdir -p "$PROCESSED_DIR" "$RESULTS_DIR"
 
-./scripts/clear_pdb.sh -i "$PDB" -o "$PROCESSED_DIR" || {
-  echo "$PDB: cleaning failed" >&2
-  exit 1
+  ./scripts/clear_pdb.sh -i "$PDB" -o "$PROCESSED_DIR" || {
+    echo "$PDB: cleaning failed" >&2
+    exit 1
+  }
+
+  ./scripts/prepare_simulation.sh -i "$PROCESSED_DIR/$(basename "$PDB" .pdb)_clean.pdb" -g "$GAS" -n "$MOLECULES" -o "$RESULTS_DIR/$(basename "$PDB" .pdb)" || {
+    echo "$PDB: simulation failed" >&2
+    exit 1
+  }
+
+  sbatch ./scripts/simulate.sh -d "$RESULTS_DIR/intermediate" -g "$GAS"
 }
 
-./scripts/simulate.sh -i "$PROCESSED_DIR/$(basename "$PDB" .pdb)_clean.pdb" -o "$RESULTS_DIR/$(basename "$PDB" .pdb)" || {
-  echo "$PDB: simulation failed" >&2
-  exit 1
-}
+main "$@"
