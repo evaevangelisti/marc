@@ -1,9 +1,0 @@
-HEADER    CARBON DIOXIDE
-HETATM    1  C   CO2     0       0.000   0.000   0.000  0.00  0.00           C
-HETATM    2  O   CO2     0       0.000   0.000  -1.208  0.00  0.00           O
-HETATM    3  O   CO2     0       0.000   0.000   1.208  0.00  0.00           O
-CONECT    1    2    3
-CONECT    2    1
-CONECT    3    1
-TER
-END
